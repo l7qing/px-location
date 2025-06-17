@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- 基础应用主题 -->
+    <style name="Theme.PXlocation" parent="Theme.AppCompat.Light.NoActionBar">
+        <!-- 主要品牌颜色 -->
+        <item name="colorPrimary">@color/purple_500</item>
+        <item name="colorPrimaryDark">@color/purple_700</item>
+        <item name="colorAccent">@color/teal_200</item>
+        <!-- 状态栏颜色 -->
+        <item name="android:statusBarColor">?attr/colorPrimaryDark</item>
+    </style>
+    
+    <!-- Compose主题将继续使用Material主题 -->
+    <style name="Theme.PXlocation.Compose" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>
