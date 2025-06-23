@@ -196,6 +196,15 @@ object RootUtils {
     }
     
     /**
+     * 执行多个Shell命令并返回结果
+     * @param commands 要执行的命令列表
+     * @return 命令执行结果
+     */
+    fun executeCommands(commands: List<String>): String {
+        return executeCommands(commands.toTypedArray())
+    }
+    
+    /**
      * 执行需要Root权限的命令
      * @param command 要执行的命令
      * @return 命令执行结果

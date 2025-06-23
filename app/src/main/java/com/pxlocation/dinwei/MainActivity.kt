@@ -96,6 +96,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -105,6 +106,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import com.amap.api.maps.model.LatLng
 import com.amap.api.services.core.LatLonPoint
@@ -118,15 +120,25 @@ import com.pxlocation.dinwei.ui.components.MapComponent
 import com.pxlocation.dinwei.ui.theme.PXlocationTheme
 import com.pxlocation.dinwei.utils.PermissionUtils
 import com.pxlocation.dinwei.utils.RootUtils
+import com.pxlocation.dinwei.viewmodel.LocationViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.Color
 
 // 定义格式化小数点的扩展函数
 fun Double.formatCoordinate(digits: Int): String {
     return String.format(Locale.US, "%.${digits}f", this)
+}
+
+// 格式化日期时间
+fun formatDateTime(timestamp: Long): String {
+    val sdf = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
+    return sdf.format(java.util.Date(timestamp))
 }
 
 class MainActivity : ComponentActivity() {
@@ -143,6 +155,9 @@ class MainActivity : ComponentActivity() {
     // 地图组件引用
     private var mapComponentRef: com.pxlocation.dinwei.ui.components.MapComponent? = null
     
+    // 添加ViewModel引用
+    private lateinit var locationViewModel: LocationViewModel
+    
     companion object {
         private const val TAG = "MainActivity"
         private const val LOCATION_PERMISSION_REQUEST_CODE = 1001
@@ -152,6 +167,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         
         try {
+            // 初始化ViewModel
+            locationViewModel = ViewModelProvider(this)[LocationViewModel::class.java]
+            
             // 检查隐私政策是否已接受
             if (!PrivacyPolicyActivity.isPrivacyPolicyAccepted(this)) {
                 Log.d(TAG, "Privacy policy not accepted, launching PrivacyPolicyActivity")
@@ -169,8 +187,17 @@ class MainActivity : ComponentActivity() {
                     ) {
                         var mapLoaded by remember { mutableStateOf(false) }
                         var searchText by remember { mutableStateOf("") }
-                        var selectedLocation by remember { mutableStateOf<LatLng?>(null) }
-                        var locationAddress by remember { mutableStateOf("获取地址中...") }
+                        
+                        // 使用ViewModel的LiveData
+                        val selectedLocation by locationViewModel.selectedLocation.observeAsState()
+                        val locationAddress by locationViewModel.locationAddress.observeAsState("获取地址中...")
+                        val isMockingLocation by locationViewModel.isMockingLocation.observeAsState(false)
+                        val mockStatus by locationViewModel.mockStatus.observeAsState("未开始模拟")
+                        val rootStatus by locationViewModel.rootStatus.observeAsState(false)
+                        val mockDetailedStatus by locationViewModel.mockDetailedStatus.observeAsState("")
+                        val errorMessage by locationViewModel.errorMessage.observeAsState()
+                        val lastUpdateTime by locationViewModel.lastUpdateTime.observeAsState(0L)
+                        
                         var showLocationPermissionDialog by remember { mutableStateOf(false) }
                         var showRootPermissionDialog by remember { mutableStateOf(false) }
                         
@@ -185,13 +212,11 @@ class MainActivity : ComponentActivity() {
                                         if (rCode == 1000 && result != null) {
                                             val address = result.regeocodeAddress?.formatAddress ?: "未知地址"
                                             Log.d(TAG, "获取到地址: $address")
-                                            locationAddress = address
-                                            this@MainActivity.locationAddress.value = address
+                                            locationViewModel.setLocationAddress(address)
                                         } else {
                                             val errorMsg = "获取地址失败，错误码: $rCode"
                                             Log.e(TAG, errorMsg)
-                                            locationAddress = "地址获取失败"
-                                            this@MainActivity.locationAddress.value = "地址获取失败"
+                                            locationViewModel.setLocationAddress("地址获取失败")
                                         }
                                     }
 
@@ -207,8 +232,7 @@ class MainActivity : ComponentActivity() {
                             if (selectedLocation != null) {
                                 try {
                                     Log.d(TAG, "开始获取位置地址: $selectedLocation")
-                                    locationAddress = "获取地址中..."
-                                    this@MainActivity.locationAddress.value = "获取地址中..."
+                                    locationViewModel.setLocationAddress("获取地址中...")
                                     
                                     val query = RegeocodeQuery(
                                         LatLonPoint(selectedLocation?.latitude ?: 0.0, selectedLocation?.longitude ?: 0.0),
@@ -217,12 +241,8 @@ class MainActivity : ComponentActivity() {
                                     geocodeSearch.getFromLocationAsyn(query)
                                 } catch (e: Exception) {
                                     Log.e(TAG, "获取地址时出错: ${e.message}")
-                                    locationAddress = "地址获取失败: ${e.message}"
-                                    this@MainActivity.locationAddress.value = "地址获取失败: ${e.message}"
+                                    locationViewModel.setLocationAddress("地址获取失败: ${e.message}")
                                 }
-                                
-                                // 同步到外部状态
-                                this@MainActivity.selectedLocation.value = selectedLocation
                             }
                         }
                         
@@ -252,7 +272,7 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onLocationSelected = { latLng ->
                                     Log.d(TAG, "地图点击: $latLng")
-                                    selectedLocation = latLng
+                                    locationViewModel.setSelectedLocation(latLng)
                                 }
                             )
                             
@@ -271,7 +291,7 @@ class MainActivity : ComponentActivity() {
                             LocationSearchBar(
                                 onLocationSelected = { latLng ->
                                     Log.d(TAG, "从搜索栏选择位置: $latLng")
-                                    selectedLocation = latLng
+                                    locationViewModel.setSelectedLocation(latLng)
                                     
                                     // 移动地图到选择的位置
                                     mapComponentRef?.moveToLocation(latLng, true)
@@ -281,6 +301,22 @@ class MainActivity : ComponentActivity() {
                                     showUserActualLocation()
                                 }
                             )
+                            
+                            // 添加状态卡片在顶部
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 80.dp) // 留出搜索栏的空间
+                            ) {
+                                StatusCard(
+                                    mockStatus = mockStatus,
+                                    isMockingLocation = isMockingLocation,
+                                    rootStatus = rootStatus,
+                                    mockDetailedStatus = mockDetailedStatus,
+                                    errorMessage = errorMessage,
+                                    lastUpdateTime = lastUpdateTime
+                                )
+                            }
                             
                             // 底部信息卡片
                             if (selectedLocation != null) {
@@ -314,15 +350,45 @@ class MainActivity : ComponentActivity() {
                                             textAlign = TextAlign.Center
                                         )
                                         
-                                        Spacer(modifier = Modifier.height(16.dp))
+                                        Spacer(modifier = Modifier.height(8.dp))
                                         
-                                        // 这里之前是模拟位置按钮
+                                        // 显示模拟状态
                                         Text(
-                                            text = "注意：位置模拟功能已删除，需要重新实现",
+                                            text = mockStatus,
                                             style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.error,
+                                            color = if (isMockingLocation) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                                             textAlign = TextAlign.Center
                                         )
+                                        
+                                        Spacer(modifier = Modifier.height(16.dp))
+                                        
+                                        // 模拟位置按钮
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceEvenly
+                                        ) {
+                                            Button(
+                                                onClick = {
+                                                    if (isMockingLocation) {
+                                                        locationViewModel.stopMockLocation()
+                                                    } else {
+                                                        locationViewModel.startMockLocation()
+                                                    }
+                                                },
+                                                enabled = rootStatus && selectedLocation != null
+                                            ) {
+                                                Text(if (isMockingLocation) "停止模拟" else "开始模拟")
+                                            }
+                                            
+                                            Button(
+                                                onClick = {
+                                                    locationViewModel.updateMockLocation()
+                                                },
+                                                enabled = rootStatus && selectedLocation != null && isMockingLocation
+                                            ) {
+                                                Text("更新位置")
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -465,8 +531,8 @@ class MainActivity : ComponentActivity() {
                             Log.d(TAG, "获取到用户实际位置: $latLng, 地址: ${userLocation!!.address}")
                             
                             // 更新选中位置
-                            selectedLocation.value = latLng
-                            locationAddress.value = userLocation!!.address ?: "未知地址"
+                            locationViewModel.setSelectedLocation(latLng)
+                            locationViewModel.setLocationAddress(userLocation!!.address ?: "未知地址")
                             
                             // 移动地图到用户实际位置
                             mapComponentRef?.let { mapComponent ->
@@ -508,4 +574,109 @@ fun MainScreen(
     onStopMock: () -> Unit
 ) {
     // 主屏幕布局
+}
+
+@Composable
+fun StatusCard(
+    mockStatus: String,
+    isMockingLocation: Boolean,
+    rootStatus: Boolean,
+    mockDetailedStatus: String = "",
+    errorMessage: String? = null,
+    lastUpdateTime: Long = 0L
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .border(
+                width = 1.dp,
+                color = if (isMockingLocation) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                shape = MaterialTheme.shapes.medium
+            ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "模拟状态",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f)
+                )
+                
+                Box(
+                    modifier = Modifier
+                        .padding(start = 8.dp)
+                        .background(
+                            color = if (isMockingLocation) Color.Green else Color.Red,
+                            shape = MaterialTheme.shapes.small
+                        )
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = if (isMockingLocation) "活跃" else "未激活",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            // 状态信息
+            Text(
+                text = mockStatus,
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center,
+                color = if (isMockingLocation) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+            )
+            
+            // 详细状态信息
+            if (mockDetailedStatus.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = mockDetailedStatus,
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center
+                )
+            }
+            
+            // 错误信息
+            if (!errorMessage.isNullOrEmpty()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "错误: $errorMessage",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    textAlign = TextAlign.Center
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            // Root状态
+            Text(
+                text = if (rootStatus) "Root权限: 已获取" else "Root权限: 未获取",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (rootStatus) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+            )
+            
+            // 最后更新时间
+            if (lastUpdateTime > 0) {
+                Text(
+                    text = "上次更新: ${formatDateTime(lastUpdateTime)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
 }

@@ -24,6 +24,9 @@
     <!-- 其他权限 -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     
+    <!-- 模拟位置权限 -->
+    <uses-permission android:name="android.permission.ACCESS_MOCK_LOCATION" />
+    
     <!-- OpenGL ES 2.0 -->
     <uses-feature android:glEsVersion="0x00020000" android:required="true" />
     
@@ -56,6 +59,13 @@
             android:exported="false"
             android:theme="@style/Theme.PXlocation" />
         
+        <!-- 位置注入服务 -->
+        <service
+            android:name=".service.LocationInjectorService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+            
         <!-- 高德地图API密钥 -->
         <meta-data
             android:name="com.amap.api.v2.apikey"

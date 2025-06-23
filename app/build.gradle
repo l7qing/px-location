@@ -19,6 +19,19 @@ android {
         vectorDrawables {
             useSupportLibrary true
         }
+        
+        // 添加CMake支持
+        externalNativeBuild {
+            cmake {
+                cppFlags ""
+                arguments "-DANDROID_STL=c++_shared"
+            }
+        }
+        
+        // 指定支持的ABI
+        ndk {
+            abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
+        }
     }
 
     buildTypes {
@@ -40,6 +53,21 @@ android {
     }
     composeOptions {
         kotlinCompilerExtensionVersion '1.3.2'
+    }
+    
+    // 配置CMake
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+            version "3.18.1"
+        }
+    }
+    
+    // 打包so库
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
 }
 
@@ -72,6 +100,7 @@ dependencies {
     implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.5.1'
     implementation 'androidx.lifecycle:lifecycle-livedata-ktx:2.5.1'
     implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.5.1'
+    implementation 'androidx.compose.runtime:runtime-livedata:1.3.3'
     
     // Room 数据库
     implementation 'androidx.room:room-runtime:2.4.3'
